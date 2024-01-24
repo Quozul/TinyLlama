@@ -1,23 +1,24 @@
 torch>=2.1.0dev
 lightning==2.1.2
 lightning[app]
-jsonargparse[signatures]  # CLI
-pandas
-pyarrow
+jsonargparse[signatures]~=4.27.2
+pandas~=2.2.0
+pyarrow~=15.0.0
 tokenizers
 sentencepiece
 # wandb
-zstd
+zstd~=1.5.5.1
 
 # for finetuning
-#bitsandbytes==0.40.0
-transformers==4.31.0
-peft==0.4.0
-accelerate==0.21.0
+bitsandbytes
+transformers
+peft
+accelerate
 einops==0.6.1
 evaluate==0.4.0
 scikit-learn==1.2.2
-sentencepiece==0.1.99
+sentencepiece
+tiktoken
 #wandb==0.15.3
 # other optional dependencies are
 # sentencepiece  # pythia, falcon, redpajama

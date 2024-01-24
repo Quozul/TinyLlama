@@ -198,6 +198,7 @@ def get_accelerate_model(args, checkpoint_dir):
         args.model_name_or_path,
         device_map=device_map,
         trust_remote_code=args.trust_remote_code,
+        load_in_8bit=True,
     )
 
     # Tokenizer
