@@ -1,7 +1,7 @@
 from transformers import AutoTokenizer
 import transformers 
 import torch
-model = "PY007/TinyLlama-1.1B-Chat-v0.1"
+model = "./output/503B_FT_lr1e-5_ep5_top1_2023-08-25"
 tokenizer = AutoTokenizer.from_pretrained(model)
 pipeline = transformers.pipeline(
     "text-generation",

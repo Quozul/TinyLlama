@@ -27,26 +27,22 @@ from transformers import (
     AutoModelForCausalLM,
     set_seed,
     Seq2SeqTrainer,
-    BitsAndBytesConfig,
-    LlamaTokenizer
-
 )
-from datasets import load_dataset, Dataset
+from datasets import load_dataset, Dataset, concatenate_datasets, DatasetDict
 import evaluate
 
 
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 
 
-    
-
-if torch.cuda.is_available():   
+if torch.cuda.is_available():
     torch.backends.cuda.matmul.allow_tf32 = True
 
 logger = logging.getLogger(__name__)
 
 IGNORE_INDEX = -100
 DEFAULT_PAD_TOKEN = "[PAD]"
+
 
 @dataclass
 class ModelArguments:
@@ -55,7 +51,8 @@ class ModelArguments:
     )
     trust_remote_code: Optional[bool] = field(
         default=False,
-        metadata={"help": "Enable unpickling of arbitrary code in AutoModelForCausalLM#from_pretrained."}
+        metadata={
+            "help": "Enable unpickling of arbitrary code in AutoModelForCausalLM#from_pretrained."}
     )
 
 
@@ -80,54 +77,76 @@ class DataArguments:
     )
     source_max_len: int = field(
         default=1024,
-        metadata={"help": "Maximum source sequence length. Sequences will be right padded (and possibly truncated)."},
+        metadata={
+            "help": "Maximum source sequence length. Sequences will be right padded (and possibly truncated)."},
     )
     target_max_len: int = field(
         default=256,
-        metadata={"help": "Maximum target sequence length. Sequences will be right padded (and possibly truncated)."},
+        metadata={
+            "help": "Maximum target sequence length. Sequences will be right padded (and possibly truncated)."},
     )
     dataset: str = field(
         default='alpaca',
-        metadata={"help": "Which dataset to finetune on. See datamodule for options."}
+        metadata={
+            "help": "Which dataset to finetune on. See datamodule for options."}
     )
     dataset_format: Optional[str] = field(
         default=None,
-        metadata={"help": "Which dataset format is used. [alpaca|chip2|self-instruct|hh-rlhf]"}
+        metadata={
+            "help": "Which dataset format is used. [alpaca|chip2|self-instruct|hh-rlhf]"}
     )
+
 
 @dataclass
 class TrainingArguments(transformers.Seq2SeqTrainingArguments):
 
     train_on_source: Optional[bool] = field(
         default=False,
-        metadata={"help": "Whether to train on the input in addition to the target text."}
+        metadata={
+            "help": "Whether to train on the input in addition to the target text."}
     )
-
-
-
 
     report_to: str = field(
         default='none',
         metadata={"help": "To use wandb or something else for reporting."}
     )
-    output_dir: str = field(default='./output', metadata={"help": 'The output dir for logs and checkpoints'})
-    optim: str = field(default='adamw_torch', metadata={"help": 'The optimizer to be used'})
-    per_device_train_batch_size: int = field(default=16, metadata={"help": 'The training batch size per GPU. Increase for better speed.'})
-    gradient_accumulation_steps: int = field(default=1, metadata={"help": 'How many gradients to accumulate before to perform an optimizer step'})
-    max_steps: int = field(default=10000, metadata={"help": 'How many optimizer update steps to take'})
-    weight_decay: float = field(default=0.0, metadata={"help": 'The L2 weight decay rate of AdamW'})
-    learning_rate: float = field(default=0.0002, metadata={"help": 'The learnign rate'})
-    remove_unused_columns: bool = field(default=False, metadata={"help": 'Removed unused columns. Needed to make this codebase work.'})
-    max_grad_norm: float = field(default=0.3, metadata={"help": 'Gradient clipping max norm. This is tuned and works well for all models tested.'})
-    gradient_checkpointing: bool = field(default=True, metadata={"help": 'Use gradient checkpointing. You want to use this.'})
-    do_train: bool = field(default=True, metadata={"help": 'To train or not to train, that is the question?'})
-    lr_scheduler_type: str = field(default='constant', metadata={"help": 'Learning rate schedule. Constant a bit better than cosine, and has advantage for analysis'})
-    warmup_ratio: float = field(default=0.03, metadata={"help": 'Fraction of steps to do a warmup for'})
-    logging_steps: int = field(default=10, metadata={"help": 'The frequency of update steps after which to log the loss'})
-    group_by_length: bool = field(default=True, metadata={"help": 'Group sequences into batches with same length. Saves memory and speeds up training considerably.'})
-    save_strategy: str = field(default='steps', metadata={"help": 'When to save checkpoints'})
-    save_steps: int = field(default=250, metadata={"help": 'How often to save a model'})
-    save_total_limit: int = field(default=40, metadata={"help": 'How many checkpoints to save before the oldest is overwritten'})
+    output_dir: str = field(
+        default='./output', metadata={"help": 'The output dir for logs and checkpoints'})
+    optim: str = field(default='adamw_torch', metadata={
+                       "help": 'The optimizer to be used'})
+    per_device_train_batch_size: int = field(default=16, metadata={
+                                             "help": 'The training batch size per GPU. Increase for better speed.'})
+    gradient_accumulation_steps: int = field(default=1, metadata={
+                                             "help": 'How many gradients to accumulate before to perform an optimizer step'})
+    max_steps: int = field(default=10000, metadata={
+                           "help": 'How many optimizer update steps to take'})
+    weight_decay: float = field(default=0.0, metadata={
+                                "help": 'The L2 weight decay rate of AdamW'})
+    learning_rate: float = field(default=0.0002, metadata={
+                                 "help": 'The learnign rate'})
+    remove_unused_columns: bool = field(default=False, metadata={
+                                        "help": 'Removed unused columns. Needed to make this codebase work.'})
+    max_grad_norm: float = field(default=0.3, metadata={
+                                 "help": 'Gradient clipping max norm. This is tuned and works well for all models tested.'})
+    gradient_checkpointing: bool = field(default=True, metadata={
+                                         "help": 'Use gradient checkpointing. You want to use this.'})
+    do_train: bool = field(default=True, metadata={
+                           "help": 'To train or not to train, that is the question?'})
+    lr_scheduler_type: str = field(default='constant', metadata={
+                                   "help": 'Learning rate schedule. Constant a bit better than cosine, and has advantage for analysis'})
+    warmup_ratio: float = field(default=0.03, metadata={
+                                "help": 'Fraction of steps to do a warmup for'})
+    logging_steps: int = field(default=10, metadata={
+                               "help": 'The frequency of update steps after which to log the loss'})
+    group_by_length: bool = field(default=True, metadata={
+                                  "help": 'Group sequences into batches with same length. Saves memory and speeds up training considerably.'})
+    save_strategy: str = field(default='steps', metadata={
+                               "help": 'When to save checkpoints'})
+    save_steps: int = field(default=250, metadata={
+                            "help": 'How often to save a model'})
+    save_total_limit: int = field(default=40, metadata={
+                                  "help": 'How many checkpoints to save before the oldest is overwritten'})
+
 
 @dataclass
 class GenerationArguments:
@@ -139,7 +158,7 @@ class GenerationArguments:
         metadata={"help": "Maximum number of new tokens to be generated in evaluation or prediction loops"
                           "if predict_with_generate is set."}
     )
-    min_new_tokens : Optional[int] = field(
+    min_new_tokens: Optional[int] = field(
         default=None,
         metadata={"help": "Minimum number of new tokens to generate."}
     )
@@ -162,13 +181,7 @@ class GenerationArguments:
     no_repeat_ngram_size: Optional[int] = field(default=0)
 
 
-
-
-
 def get_accelerate_model(args, checkpoint_dir):
-
-
-
 
     device_map = "auto"
 
@@ -177,6 +190,8 @@ def get_accelerate_model(args, checkpoint_dir):
         local_rank = int(os.environ.get('LOCAL_RANK', '0'))
         device_map = {'': local_rank}
 
+    max_memory = f'{int(torch.cuda.mem_get_info()[0]/1024**3)-2}GB'
+    print(f'Using {max_memory}')
 
     print(f'loading base model {args.model_name_or_path}...')
     model = AutoModelForCausalLM.from_pretrained(
@@ -185,21 +200,19 @@ def get_accelerate_model(args, checkpoint_dir):
         trust_remote_code=args.trust_remote_code,
     )
 
-
-
-
     # Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         args.model_name_or_path,
         padding_side="right",
-        use_fast=True, # Fast tokenizer giving issues.
+        use_fast=True,  # Fast tokenizer giving issues.
         trust_remote_code=args.trust_remote_code,
     )
     if tokenizer._pad_token is None:
         special_tokens_dict = dict(pad_token=DEFAULT_PAD_TOKEN)
         if args.dataset == "OpenAssistant/oasst_top1_2023-08-25":
             chat_special_tokens = ["<|im_start|>", "<|im_end|>"]
-            special_tokens_dict.update(additional_special_tokens=chat_special_tokens)
+            special_tokens_dict.update(
+                additional_special_tokens=chat_special_tokens)
 
         smart_tokenizer_and_embedding_resize(
             special_tokens_dict=special_tokens_dict,
@@ -208,6 +221,7 @@ def get_accelerate_model(args, checkpoint_dir):
         )
 
     return model, tokenizer
+
 
 def print_trainable_parameters(args, model):
     """
@@ -224,29 +238,34 @@ def print_trainable_parameters(args, model):
         f"all params: {all_param} || "
     )
 
+
 def smart_tokenizer_and_embedding_resize(
     special_tokens_dict: Dict,
     tokenizer: transformers.PreTrainedTokenizer,
     model: transformers.PreTrainedModel,
-    non_special_tokens = None,
+    non_special_tokens=None,
 ):
     """Resize tokenizer and embedding.
 
     Note: This is the unoptimized version that may make your embedding size not be divisible by 64.
     """
-    num_new_tokens = tokenizer.add_special_tokens(special_tokens_dict) + tokenizer.add_tokens(non_special_tokens)
+    num_new_tokens = tokenizer.add_special_tokens(
+        special_tokens_dict) + tokenizer.add_tokens(non_special_tokens)
     model.resize_token_embeddings(len(tokenizer))
-    
+
     if num_new_tokens > 0:
         input_embeddings_data = model.get_input_embeddings().weight.data
         output_embeddings_data = model.get_output_embeddings().weight.data
 
-        input_embeddings_avg = input_embeddings_data[:-num_new_tokens].mean(dim=0, keepdim=True)
-        output_embeddings_avg = output_embeddings_data[:-num_new_tokens].mean(dim=0, keepdim=True)
+        input_embeddings_avg = input_embeddings_data[:-
+                                                     num_new_tokens].mean(dim=0, keepdim=True)
+        output_embeddings_avg = output_embeddings_data[:-
+                                                       num_new_tokens].mean(dim=0, keepdim=True)
 
         input_embeddings_data[-num_new_tokens:] = input_embeddings_avg
         output_embeddings_data[-num_new_tokens:] = output_embeddings_avg
     print(f"Resized tokenizer and embedding to {len(tokenizer)} tokens.")
+
 
 @dataclass
 class DataCollatorForCausalLM(object):
@@ -258,8 +277,10 @@ class DataCollatorForCausalLM(object):
 
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
         # Extract elements
-        sources = [f"{self.tokenizer.bos_token}{example['input']}" for example in instances]
-        targets = [f"{example['output']}{self.tokenizer.eos_token}" for example in instances]
+        sources = [
+            f"{self.tokenizer.bos_token}{example['input']}" for example in instances]
+        targets = [
+            f"{example['output']}{self.tokenizer.eos_token}" for example in instances]
         # Tokenize
         tokenized_sources_with_prompt = self.tokenizer(
             sources,
@@ -281,25 +302,31 @@ class DataCollatorForCausalLM(object):
             tokenized_targets['input_ids']
         ):
             if not self.predict_with_generate:
-                input_ids.append(torch.tensor(tokenized_source + tokenized_target))
+                input_ids.append(torch.tensor(
+                    tokenized_source + tokenized_target))
                 if not self.train_on_source:
                     labels.append(
-                        torch.tensor([IGNORE_INDEX for _ in range(len(tokenized_source))] + copy.deepcopy(tokenized_target))
+                        torch.tensor([IGNORE_INDEX for _ in range(
+                            len(tokenized_source))] + copy.deepcopy(tokenized_target))
                     )
                 else:
-                    labels.append(torch.tensor(copy.deepcopy(tokenized_source + tokenized_target)))
+                    labels.append(torch.tensor(copy.deepcopy(
+                        tokenized_source + tokenized_target)))
             else:
                 input_ids.append(torch.tensor(tokenized_source))
         # Apply padding
-        input_ids = pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
-        labels = pad_sequence(labels, batch_first=True, padding_value=IGNORE_INDEX) if not self.predict_with_generate else None
+        input_ids = pad_sequence(
+            input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
+        labels = pad_sequence(
+            labels, batch_first=True, padding_value=IGNORE_INDEX) if not self.predict_with_generate else None
         data_dict = {
             'input_ids': input_ids,
-            'attention_mask':input_ids.ne(self.tokenizer.pad_token_id),
+            'attention_mask': input_ids.ne(self.tokenizer.pad_token_id),
         }
         if labels is not None:
             data_dict['labels'] = labels
         return data_dict
+
 
 def extract_unnatural_instructions_data(examples, extract_reformulations=False):
     out = {
@@ -318,6 +345,7 @@ def extract_unnatural_instructions_data(examples, extract_reformulations=False):
                     out['output'].append(instance['output'])
     return out
 
+
 ALPACA_PROMPT_DICT = {
     "prompt_input": (
         "Below is an instruction that describes a task, paired with an input that provides further context. "
@@ -331,6 +359,7 @@ ALPACA_PROMPT_DICT = {
     ),
 }
 
+
 def extract_alpaca_dataset(example):
     if example.get("input", "") != "":
         prompt_format = ALPACA_PROMPT_DICT["prompt_input"]
@@ -338,18 +367,21 @@ def extract_alpaca_dataset(example):
         prompt_format = ALPACA_PROMPT_DICT["prompt_no_input"]
     return {'input': prompt_format.format(**example)}
 
-def local_dataset(dataset_name):
+
+def local_dataset(dataset_name: str):
     if dataset_name.endswith('.json') or dataset_name.endswith('.jsonl'):
         full_dataset = Dataset.from_json(path_or_paths=dataset_name)
     elif dataset_name.endswith('.csv'):
         full_dataset = Dataset.from_pandas(pd.read_csv(dataset_name))
     elif dataset_name.endswith('.tsv'):
-        full_dataset = Dataset.from_pandas(pd.read_csv(dataset_name, delimiter='\t'))
+        full_dataset = Dataset.from_pandas(
+            pd.read_csv(dataset_name, delimiter='\t'))
     else:
         raise ValueError(f"Unsupported dataset format: {dataset_name}")
 
     split_dataset = full_dataset.train_test_split(test_size=0.1)
     return split_dataset
+
 
 def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
     """
@@ -375,7 +407,7 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
         - vicuna
 
     """
-    def load_data(dataset_name):
+    def load_data(dataset_name: str):
         if dataset_name == 'alpaca':
             return load_dataset("tatsu-lab/alpaca")
         elif dataset_name == 'alpaca-clean':
@@ -390,6 +422,18 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
             return load_dataset("timdettmers/openassistant-guanaco")
         elif dataset_name == "OpenAssistant/oasst_top1_2023-08-25":
             return load_dataset("OpenAssistant/oasst_top1_2023-08-25")
+        elif dataset_name == "claire":
+            return load_dataset("OpenLLM-France/Claire-Dialogue-French-0.1", sample_by="paragraph")
+        elif dataset_name == "slimorca":
+            return load_dataset("json", data_files={"train": "/var/home/erwan/PycharmProjects/dataset_generation/dataset/slimorca.jsonl"})
+        elif dataset_name == "anime":
+            claire = load_dataset(
+                "OpenLLM-France/Claire-Dialogue-French-0.1", sample_by="paragraph")
+            anime = load_dataset("text", data_files={
+                                 "train": "dialogues.txt"}, sample_by="paragraph")
+            dataset = concatenate_datasets([claire['train'], anime['train']])
+            merged_dataset = DatasetDict({"train": dataset})
+            return merged_dataset
         elif dataset_name == 'vicuna':
             raise NotImplementedError("Vicuna data was not released.")
         else:
@@ -399,16 +443,20 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
                     full_dataset = local_dataset(dataset_name)
                     return full_dataset
                 except:
-                    raise ValueError(f"Error loading dataset from {dataset_name}")
+                    raise ValueError(
+                        f"Error loading dataset from {dataset_name}")
             else:
-                raise NotImplementedError(f"Dataset {dataset_name} not implemented yet.")
+                raise NotImplementedError(
+                    f"Dataset {dataset_name} not implemented yet.")
 
-    def format_dataset(dataset, dataset_format):
+    def format_dataset(dataset, dataset_format: str):
         if (
             dataset_format == 'alpaca' or dataset_format == 'alpaca-clean' or
-            (dataset_format is None and args.dataset in ['alpaca', 'alpaca-clean'])
+            (dataset_format is None and args.dataset in [
+             'alpaca', 'alpaca-clean'])
         ):
-            dataset = dataset.map(extract_alpaca_dataset, remove_columns=['instruction'])
+            dataset = dataset.map(extract_alpaca_dataset,
+                                  remove_columns=['instruction'])
         elif dataset_format == 'chip2' or (dataset_format is None and args.dataset == 'chip2'):
             dataset = dataset.map(lambda x: {
                 'input': x['text'].split('\n<bot>: ')[0].replace('<human>: ', ''),
@@ -432,20 +480,22 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
             pass
         # Remove unused columns.
         dataset = dataset.remove_columns(
-            [col for col in dataset.column_names['train'] if col not in ['input', 'output']]
+            [col for col in dataset.column_names['train']
+                if col not in ['input', 'output']]
         )
         return dataset
 
      # Load dataset.
     dataset = load_data(args.dataset)
     dataset = format_dataset(dataset, args.dataset_format)
- 
+
     # Split train/eval, reduce size
     if args.do_eval or args.do_predict:
         if 'eval' in dataset:
             eval_dataset = dataset['eval']
         else:
-            print('Splitting train dataset in train and validation according to `eval_dataset_size`')
+            print(
+                'Splitting train dataset in train and validation according to `eval_dataset_size`')
             dataset = dataset["train"].train_test_split(
                 test_size=args.eval_dataset_size, shuffle=True, seed=42
             )
@@ -453,13 +503,15 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
         if args.max_eval_samples is not None and len(eval_dataset) > args.max_eval_samples:
             eval_dataset = eval_dataset.select(range(args.max_eval_samples))
         if args.group_by_length:
-            eval_dataset = eval_dataset.map(lambda x: {'length': len(x['input']) + len(x['output'])})
+            eval_dataset = eval_dataset.map(
+                lambda x: {'length': len(x['input']) + len(x['output'])})
     if args.do_train:
         train_dataset = dataset['train']
         if args.max_train_samples is not None and len(train_dataset) > args.max_train_samples:
             train_dataset = train_dataset.select(range(args.max_train_samples))
         if args.group_by_length:
-            train_dataset = train_dataset.map(lambda x: {'length': len(x['input']) + len(x['output'])})
+            train_dataset = train_dataset.map(
+                lambda x: {'length': len(x['input']) + len(x['output'])})
 
     data_collator = DataCollatorForCausalLM(
         tokenizer=tokenizer,
@@ -475,19 +527,24 @@ def make_data_module(tokenizer: transformers.PreTrainedTokenizer, args) -> Dict:
         data_collator=data_collator
     )
 
+
 def get_last_checkpoint(checkpoint_dir):
     if isdir(checkpoint_dir):
         is_completed = exists(join(checkpoint_dir, 'completed'))
-        if is_completed: return None, True # already finished
+        if is_completed:
+            return None, True  # already finished
         max_step = 0
         for filename in os.listdir(checkpoint_dir):
             if isdir(join(checkpoint_dir, filename)) and filename.startswith('checkpoint'):
-                max_step = max(max_step, int(filename.replace('checkpoint-', '')))
-        if max_step == 0: return None, is_completed # training started, but no checkpoint
+                max_step = max(max_step, int(
+                    filename.replace('checkpoint-', '')))
+        if max_step == 0:
+            return None, is_completed  # training started, but no checkpoint
         checkpoint_dir = join(checkpoint_dir, f'checkpoint-{max_step}')
         print(f"Found a previous checkpoint at: {checkpoint_dir}")
-        return checkpoint_dir, is_completed # checkpoint found!
-    return None, False # first training
+        return checkpoint_dir, is_completed  # checkpoint found!
+    return None, False  # first training
+
 
 def train():
     hfparser = transformers.HfArgumentParser((
@@ -495,12 +552,13 @@ def train():
     ))
     model_args, data_args, training_args, generation_args, extra_args = \
         hfparser.parse_args_into_dataclasses(return_remaining_strings=True)
-    training_args.generation_config = transformers.GenerationConfig(**vars(generation_args))
+    training_args.generation_config = transformers.GenerationConfig(
+        **vars(generation_args))
     args = argparse.Namespace(
         **vars(model_args), **vars(data_args), **vars(training_args)
     )
     print(args)
-    
+
     checkpoint_dir, completed_training = get_last_checkpoint(args.output_dir)
     if completed_training:
         print('Detected that training was already completed!')
@@ -512,29 +570,25 @@ def train():
     set_seed(args.seed)
 
     data_module = make_data_module(tokenizer=tokenizer, args=args)
-    
+
     trainer = Seq2SeqTrainer(
         model=model,
         tokenizer=tokenizer,
         args=training_args,
-        **{k:v for k,v in data_module.items() if k != 'predict_dataset'},
+        **{k: v for k, v in data_module.items() if k != 'predict_dataset'},
     )
-
-
-   
-        
-
-        
 
     # Verifying the datatypes and parameter counts before training.
     print_trainable_parameters(args, model)
     dtypes = {}
     for _, p in model.named_parameters():
         dtype = p.dtype
-        if dtype not in dtypes: dtypes[dtype] = 0
+        if dtype not in dtypes:
+            dtypes[dtype] = 0
         dtypes[dtype] += p.numel()
     total = 0
-    for k, v in dtypes.items(): total+= v
+    for k, v in dtypes.items():
+        total += v
     for k, v in dtypes.items():
         print(k, v, v/total)
 
@@ -560,17 +614,20 @@ def train():
     # Prediction
     if args.do_predict:
         logger.info("*** Predict ***")
-        prediction_output = trainer.predict(test_dataset=data_module['predict_dataset'],metric_key_prefix="predict")
+        prediction_output = trainer.predict(
+            test_dataset=data_module['predict_dataset'], metric_key_prefix="predict")
         prediction_metrics = prediction_output.metrics
         predictions = prediction_output.predictions
-        predictions = np.where(predictions != -100, predictions, tokenizer.pad_token_id)
+        predictions = np.where(predictions != -100,
+                               predictions, tokenizer.pad_token_id)
         predictions = tokenizer.batch_decode(
             predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
         )
         with open(os.path.join(args.output_dir, 'predictions.jsonl'), 'w') as fout:
             for i, example in enumerate(data_module['predict_dataset']):
                 example['prediction_with_input'] = predictions[i].strip()
-                example['prediction'] = predictions[i].replace(example['input'], '').strip()
+                example['prediction'] = predictions[i].replace(
+                    example['input'], '').strip()
                 fout.write(json.dumps(example) + '\n')
         print(prediction_metrics)
         trainer.log_metrics("predict", prediction_metrics)
@@ -580,6 +637,7 @@ def train():
     if (args.do_train or args.do_eval or args.do_predict):
         with open(os.path.join(args.output_dir, "metrics.json"), "w") as fout:
             fout.write(json.dumps(all_metrics))
+
 
 if __name__ == "__main__":
     train()
