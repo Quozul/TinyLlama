@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 import sys
 from typing import Optional, Dict, Sequence
 import numpy as np
+from peft import LoraConfig
 from tqdm import tqdm
 import logging
 
@@ -200,6 +201,12 @@ def get_accelerate_model(args, checkpoint_dir):
         trust_remote_code=args.trust_remote_code,
         load_in_8bit=True,
     )
+    lora_config = LoraConfig(
+        target_modules=["q_proj", "k_proj"],
+        init_lora_weights=False
+    )
+
+    model.add_adapter(lora_config, adapter_name="adapter_1")
 
     # Tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
